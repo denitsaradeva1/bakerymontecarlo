@@ -11,11 +11,7 @@ from typing import Dict, List, Tuple
 import matplotlib.pyplot as plt
 import streamlit as st
 
-# ============================================================
-# Streamlit "not updating" fix:
-# Clear session_state only ONCE per browser session.
-# (Clearing on every rerun breaks inputs.)
-# ============================================================
+
 if "___cleared_once" not in st.session_state:
     st.session_state.clear()
     st.session_state["___cleared_once"] = True
@@ -303,7 +299,6 @@ with st.sidebar:
     st.subheader("Demand / Production policy")
     demand_noise_sd = st.slider("Demand noise SD", 0.0, 0.5, 0.12, 0.01, key="noise_v7")
     safety = st.slider("Safety factor (produce vs expected demand)", 0.80, 1.20, 1.05, 0.01, key="safety_v7")
-    )
 
 products = DEFAULT_PRODUCTS
 costs = Costs(fixed_cost_per_day=float(fixed_cost), extra_staff_cost=float(staff_cost))
