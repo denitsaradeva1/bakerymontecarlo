@@ -378,5 +378,3 @@ with tab2:
              for (n, mp, ms, sc) in data],
             use_container_width=True
         )
-
-        )
