@@ -314,7 +314,6 @@ with tab1:
             costs=costs,
             production_plan=plan,
             extra_staff=int(extra_staff),
-            demand_noise_sd=float(demand_noise_sd),
             capacity_gain_per_staff=float(capacity_gain_per_staff),
             safety=float(safety),
         )
@@ -354,4 +353,5 @@ with tab2:
             use_container_width=True
 
         )
+
 
