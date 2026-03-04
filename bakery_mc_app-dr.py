@@ -227,7 +227,55 @@ def run_mc(
 
     monthly_avg = [x / runs for x in monthly_avg]
     return {
-@@ -276,101 +272,96 @@
+        "mean_profit": statistics.mean(profits),
+        "stdev_profit": statistics.pstdev(profits) if runs > 1 else 0.0,
+        "mean_stockout": statistics.mean(stockouts),
+        "profits": profits,
+        "monthly_avg": monthly_avg,
+    }
+
+
+def plot_monthly(monthly_avg: List[float]):
+    fig = plt.figure()
+    x = list(range(1, 13))
+    plt.plot(x, monthly_avg, marker="o")
+    plt.title("Average profit per month")
+    plt.xlabel("Month")
+    plt.ylabel("Profit [€]")
+    plt.xticks(x)
+    plt.tight_layout()
+    return fig
+
+
+def staff_sweep(
+    runs: int,
+    seed: int,
+    staff_min: int,
+    staff_max: int,
+    penalty_per_stockout: float,
+    products: Dict[str, Product],
+    costs: Costs,
+    production_plan: Dict[str, int],
+    demand_noise_sd: float,
+    capacity_gain_per_staff: float,
+    safety: float,
+):
+    out: List[Tuple[int, float, float, float]] = []
+    for n in range(staff_min, staff_max + 1):
+        res = run_mc(
+            runs=runs,
+            seed=seed + n * 1337,
+            products=products,
+            costs=costs,
+            production_plan=production_plan,
+            extra_staff=n,
+            demand_noise_sd=demand_noise_sd,
+            capacity_gain_per_staff=capacity_gain_per_staff,
+            safety=safety,
+        )
+        score = res["mean_profit"] - penalty_per_stockout * res["mean_stockout"]
+        out.append((n, res["mean_profit"], res["mean_stockout"], score))
+    return out
 
 
 # -------------------------
