@@ -318,7 +318,6 @@ with tab1:
             production_plan=plan,
             extra_staff=int(extra_staff),
             demand_noise_sd=float(demand_noise_sd),
-            capacity_gain_per_staff=float(capacity_gain_per_staff),
             safety=float(safety),
         )
         st.write({
@@ -356,4 +355,5 @@ with tab2:
              for (n, mp, ms, sc) in data],
             use_container_width=True
         )
+
 
