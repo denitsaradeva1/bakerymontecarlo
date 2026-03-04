@@ -114,10 +114,6 @@ def simulate_one_year(
             noise_mult = max(0.4, min(1.6, 1.0 + rng.gauss(0.0, demand_noise_sd)))
             lam = MONTH_LAMBDA[m] * noise_mult
 
-            # -----------------------------------------
-            # Adaptive production: decide what to produce today
-            # (plan is treated as base capacity; staff can increase capacity)
-            # -----------------------------------------
             expected_total_items = lam * e_items
             produced_today: Dict[str, int] = {}
 
@@ -127,10 +123,10 @@ def simulate_one_year(
                 exp_units = expected_total_items * probs[pname]
                 produced_today[pname] = min(cap, max(0, int(round(exp_units * safety))))
 
-            # realized demand
+           
             customers = poisson_knuth(lam, rng)
 
-            # FAST demand sampling (batch)
+            
             if customers > 0:
                 items_list = rng.choices(item_values, weights=item_weights, k=customers)
                 total_items = sum(items_list)
@@ -157,7 +153,7 @@ def simulate_one_year(
 
                 p = products[pname]
                 revenue += sold * p.price
-                var_cost += sold * p.unit_cost       # ✅ variable cost on SOLD items
+                var_cost += sold * p.unit_cost      
                 salvage += waste * p.salvage
                 waste_cost += waste * p.waste_cost
 
@@ -276,7 +272,7 @@ def staff_sweep(
 
 
 # -------------------------
-# Streamlit UI
+# Hier beginnt Streamlit UI 
 # -------------------------
 st.set_page_config(page_title="MC Bakery", layout="wide")
 st.title("Monte-Carlo Simulation: Bakery")
@@ -307,12 +303,6 @@ with st.sidebar:
     st.subheader("Demand / Production policy")
     demand_noise_sd = st.slider("Demand noise SD", 0.0, 0.5, 0.12, 0.01, key="noise_v7")
     safety = st.slider("Safety factor (produce vs expected demand)", 0.80, 1.20, 1.05, 0.01, key="safety_v7")
-
-    st.subheader("Staff effect (IMPORTANT)")
-    capacity_gain_per_staff = st.slider(
-        "Capacity gain per extra staff (e.g. 0.08 = +8% per staff)",
-        0.0, 0.30, 0.08, 0.01,
-        key="capgain_v7"
     )
 
 products = DEFAULT_PRODUCTS
@@ -373,4 +363,5 @@ with tab2:
             [{"N": n, "E_Profit": round(mp, 2), "E_Stockout": round(ms, 1), "Score": round(sc, 2)}
              for (n, mp, ms, sc) in data],
             use_container_width=True
+
         )
