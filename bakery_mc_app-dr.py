@@ -11,11 +11,18 @@ from typing import Dict, List, Tuple
 import matplotlib.pyplot as plt
 import streamlit as st
 
-
+# ============================================================
+# Streamlit "not updating" fix:
+# Clear session_state only ONCE per browser session.
+# (Clearing on every rerun breaks inputs.)
+# ============================================================
 if "___cleared_once" not in st.session_state:
     st.session_state.clear()
     st.session_state["___cleared_once"] = True
 
+# -------------------------
+# Model parameters
+# -------------------------
 PRODUCTS = ["Rolls", "Croissant", "Cake"]
 
 
@@ -23,8 +30,8 @@ PRODUCTS = ["Rolls", "Croissant", "Cake"]
 class Product:
     price: float
     unit_cost: float
-    salvage: float    
-    waste_cost: float  
+    salvage: float      # revenue per leftover item (e.g., discounted sale)
+    waste_cost: float   # disposal/quality cost per leftover item
 
 
 @dataclass
@@ -33,7 +40,7 @@ class Costs:
     extra_staff_cost: float
 
 
-
+# Seasonal demand: base daily Poisson lambda per month
 MONTH_LAMBDA = {
     1: 220, 2: 225, 3: 245, 4: 265, 5: 280, 6: 295,
     7: 285, 8: 275, 9: 295, 10: 285, 11: 280, 12: 340
@@ -82,11 +89,11 @@ def simulate_one_year(
     rng: random.Random,
     products: Dict[str, Product],
     costs: Costs,
-    production_plan: Dict[str, int],  
+    production_plan: Dict[str, int],   # treated as base MAX capacity per day
     extra_staff: int,
     demand_noise_sd: float,
-    capacity_gain_per_staff: float,   
-    safety: float,                    
+    capacity_gain_per_staff: float,    # ✅ NEW: capacity boost per extra staff
+    safety: float,                     # adaptive production safety factor
 ) -> Tuple[float, List[float], Dict[str, float]]:
     monthly_profit: List[float] = []
     total_revenue = total_var = total_fixed = total_salv = total_waste = 0.0
@@ -97,16 +104,20 @@ def simulate_one_year(
         probs = basket_probs(m)
         e_items = expected_items_per_customer(m)
 
-       
+        # Precompute weights once per month (speed)
         prod_weights = [probs["Rolls"], probs["Croissant"], probs["Cake"]]
         item_weights = [0.25, 0.40, 0.25, 0.10] if m == 12 else [0.30, 0.42, 0.22, 0.06]
         item_values = [1, 2, 3, 4]
 
         for _ in range(DAYS_IN_MONTH[m]):
-           
+            # demand level for THIS day
             noise_mult = max(0.4, min(1.6, 1.0 + rng.gauss(0.0, demand_noise_sd)))
             lam = MONTH_LAMBDA[m] * noise_mult
 
+            # -----------------------------------------
+            # Adaptive production: decide what to produce today
+            # (plan is treated as base capacity; staff can increase capacity)
+            # -----------------------------------------
             expected_total_items = lam * e_items
             produced_today: Dict[str, int] = {}
 
@@ -116,9 +127,11 @@ def simulate_one_year(
                 exp_units = expected_total_items * probs[pname]
                 produced_today[pname] = min(cap, max(0, int(round(exp_units * safety))))
 
+            # realized demand
            
             customers = poisson_knuth(lam, rng)
 
+            # FAST demand sampling (batch)
             
             if customers > 0:
                 items_list = rng.choices(item_values, weights=item_weights, k=customers)
@@ -146,6 +159,7 @@ def simulate_one_year(
 
                 p = products[pname]
                 revenue += sold * p.price
+                var_cost += sold * p.unit_cost       # ✅ variable cost on SOLD items
                 var_cost += sold * p.unit_cost      
                 salvage += waste * p.salvage
                 waste_cost += waste * p.waste_cost
@@ -213,58 +227,11 @@ def run_mc(
 
     monthly_avg = [x / runs for x in monthly_avg]
     return {
-        "mean_profit": statistics.mean(profits),
-        "stdev_profit": statistics.pstdev(profits) if runs > 1 else 0.0,
-        "mean_stockout": statistics.mean(stockouts),
-        "profits": profits,
-        "monthly_avg": monthly_avg,
-    }
-
-
-def plot_monthly(monthly_avg: List[float]):
-    fig = plt.figure()
-    x = list(range(1, 13))
-    plt.plot(x, monthly_avg, marker="o")
-    plt.title("Average profit per month")
-    plt.xlabel("Month")
-    plt.ylabel("Profit [€]")
-    plt.xticks(x)
-    plt.tight_layout()
-    return fig
-
-
-def staff_sweep(
-    runs: int,
-    seed: int,
-    staff_min: int,
-    staff_max: int,
-    penalty_per_stockout: float,
-    products: Dict[str, Product],
-    costs: Costs,
-    production_plan: Dict[str, int],
-    demand_noise_sd: float,
-    capacity_gain_per_staff: float,
-    safety: float,
-):
-    out: List[Tuple[int, float, float, float]] = []
-    for n in range(staff_min, staff_max + 1):
-        res = run_mc(
-            runs=runs,
-            seed=seed + n * 1337,
-            products=products,
-            costs=costs,
-            production_plan=production_plan,
-            extra_staff=n,
-            demand_noise_sd=demand_noise_sd,
-            capacity_gain_per_staff=capacity_gain_per_staff,
-            safety=safety,
-        )
-        score = res["mean_profit"] - penalty_per_stockout * res["mean_stockout"]
-        out.append((n, res["mean_profit"], res["mean_stockout"], score))
-    return out
+@@ -276,101 +272,96 @@
 
 
 # -------------------------
+# Streamlit UI
 # Hier beginnt Streamlit UI 
 # -------------------------
 st.set_page_config(page_title="MC Bakery", layout="wide")
@@ -274,7 +241,7 @@ st.caption(f"Running: {os.path.abspath(__file__)}")
 with st.sidebar:
     st.header("Inputs")
 
-   
+    # reset widget values (for keys ending in _v7)
     if st.button("Reset inputs"):
         for k in list(st.session_state.keys()):
             if k.endswith("_v7"):
@@ -293,6 +260,16 @@ with st.sidebar:
     fixed_cost = st.number_input("Fixed cost/day [€]", min_value=0.0, max_value=200.0, value=90.0, step=10.0, key="fixed_v7")
     staff_cost = st.number_input("Extra staff cost/day [€]", min_value=0.0, max_value=400.0, value=20.0, step=5.0, key="staff_v7")
 
+    st.subheader("Demand / Production policy")
+    demand_noise_sd = st.slider("Demand noise SD", 0.0, 0.5, 0.12, 0.01, key="noise_v7")
+    safety = st.slider("Safety factor (produce vs expected demand)", 0.80, 1.20, 1.05, 0.01, key="safety_v7")
+
+    st.subheader("Staff effect (IMPORTANT)")
+    capacity_gain_per_staff = st.slider(
+        "Capacity gain per extra staff (e.g. 0.08 = +8% per staff)",
+        0.0, 0.30, 0.08, 0.01,
+        key="capgain_v7"
+    )
 
 products = DEFAULT_PRODUCTS
 costs = Costs(fixed_cost_per_day=float(fixed_cost), extra_staff_cost=float(staff_cost))
@@ -314,6 +291,7 @@ with tab1:
             costs=costs,
             production_plan=plan,
             extra_staff=int(extra_staff),
+            demand_noise_sd=float(demand_noise_sd),
             capacity_gain_per_staff=float(capacity_gain_per_staff),
             safety=float(safety),
         )
@@ -351,7 +329,6 @@ with tab2:
             [{"N": n, "E_Profit": round(mp, 2), "E_Stockout": round(ms, 1), "Score": round(sc, 2)}
              for (n, mp, ms, sc) in data],
             use_container_width=True
-
         )
 
-
+        )
