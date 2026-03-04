@@ -11,18 +11,10 @@ from typing import Dict, List, Tuple
 import matplotlib.pyplot as plt
 import streamlit as st
 
-# ============================================================
-# Streamlit "not updating" fix:
-# Clear session_state only ONCE per browser session.
-# (Clearing on every rerun breaks inputs.)
-# ============================================================
 if "___cleared_once" not in st.session_state:
     st.session_state.clear()
     st.session_state["___cleared_once"] = True
 
-# -------------------------
-# Model parameters
-# -------------------------
 PRODUCTS = ["Rolls", "Croissant", "Cake"]
 
 
@@ -30,8 +22,8 @@ PRODUCTS = ["Rolls", "Croissant", "Cake"]
 class Product:
     price: float
     unit_cost: float
-    salvage: float      # revenue per leftover item (e.g., discounted sale)
-    waste_cost: float   # disposal/quality cost per leftover item
+    salvage: float      
+    waste_cost: float   
 
 
 @dataclass
@@ -39,8 +31,6 @@ class Costs:
     fixed_cost_per_day: float
     extra_staff_cost: float
 
-
-# Seasonal demand: base daily Poisson lambda per month
 MONTH_LAMBDA = {
     1: 220, 2: 225, 3: 245, 4: 265, 5: 280, 6: 295,
     7: 285, 8: 275, 9: 295, 10: 285, 11: 280, 12: 340
@@ -69,7 +59,6 @@ def poisson_knuth(lmbda: float, rng: random.Random) -> int:
 
 
 def basket_probs(month: int) -> Dict[str, float]:
-    # simple seasonal preference shifts (winter more cake)
     p = {"Rolls": 0.62, "Croissant": 0.23, "Cake": 0.15}
     if month in (11, 12, 1, 2):
         p["Cake"] += 0.06
@@ -89,11 +78,11 @@ def simulate_one_year(
     rng: random.Random,
     products: Dict[str, Product],
     costs: Costs,
-    production_plan: Dict[str, int],   # treated as base MAX capacity per day
+    production_plan: Dict[str, int],   
     extra_staff: int,
     demand_noise_sd: float,
-    capacity_gain_per_staff: float,    # ✅ NEW: capacity boost per extra staff
-    safety: float,                     # adaptive production safety factor
+    capacity_gain_per_staff: float,    
+    safety: float,                     
 ) -> Tuple[float, List[float], Dict[str, float]]:
     monthly_profit: List[float] = []
     total_revenue = total_var = total_fixed = total_salv = total_waste = 0.0
@@ -114,23 +103,19 @@ def simulate_one_year(
             noise_mult = max(0.4, min(1.6, 1.0 + rng.gauss(0.0, demand_noise_sd)))
             lam = MONTH_LAMBDA[m] * noise_mult
 
-            # -----------------------------------------
-            # Adaptive production: decide what to produce today
-            # (plan is treated as base capacity; staff can increase capacity)
-            # -----------------------------------------
             expected_total_items = lam * e_items
             produced_today: Dict[str, int] = {}
 
             for pname in PRODUCTS:
                 base_cap = int(production_plan.get(pname, 0))
-                cap = int(round(base_cap * (1.0 + extra_staff * capacity_gain_per_staff)))  # ✅ staff increases cap
+                cap = int(round(base_cap * (1.0 + extra_staff * capacity_gain_per_staff))) 
                 exp_units = expected_total_items * probs[pname]
                 produced_today[pname] = min(cap, max(0, int(round(exp_units * safety))))
 
             # realized demand
             customers = poisson_knuth(lam, rng)
 
-            # FAST demand sampling (batch)
+           
             if customers > 0:
                 items_list = rng.choices(item_values, weights=item_weights, k=customers)
                 total_items = sum(items_list)
@@ -157,7 +142,7 @@ def simulate_one_year(
 
                 p = products[pname]
                 revenue += sold * p.price
-                var_cost += sold * p.unit_cost       # ✅ variable cost on SOLD items
+                var_cost += sold * p.unit_cost       
                 salvage += waste * p.salvage
                 waste_cost += waste * p.waste_cost
 
@@ -276,7 +261,7 @@ def staff_sweep(
 
 
 # -------------------------
-# Streamlit UI
+# Hier Streamlit UI beginnt
 # -------------------------
 st.set_page_config(page_title="MC Bakery", layout="wide")
 st.title("Monte-Carlo Simulation: Bakery")
@@ -285,7 +270,7 @@ st.caption(f"Running: {os.path.abspath(__file__)}")
 with st.sidebar:
     st.header("Inputs")
 
-    # reset widget values (for keys ending in _v7)
+    
     if st.button("Reset inputs"):
         for k in list(st.session_state.keys()):
             if k.endswith("_v7"):
@@ -308,7 +293,7 @@ with st.sidebar:
     demand_noise_sd = st.slider("Demand noise SD", 0.0, 0.5, 0.12, 0.01, key="noise_v7")
     safety = st.slider("Safety factor (produce vs expected demand)", 0.80, 1.20, 1.05, 0.01, key="safety_v7")
 
-    st.subheader("Staff effect (IMPORTANT)")
+    st.subheader("Staff effect")
     capacity_gain_per_staff = st.slider(
         "Capacity gain per extra staff (e.g. 0.08 = +8% per staff)",
         0.0, 0.30, 0.08, 0.01,
@@ -374,3 +359,4 @@ with tab2:
              for (n, mp, ms, sc) in data],
             use_container_width=True
         )
+
